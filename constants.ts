@@ -1,0 +1,20 @@
+import { scaleX, scaleY } from "./canvas";
+
+export const columnCount = 250;
+export const columnIterCeil = columnCount - 1;
+export const columnCheckCeil = columnIterCeil - 1;
+export const columnPercent = 100 / columnCount;
+export const columnWidth = scaleX(columnPercent);
+export const rowCount = Math.floor(columnCount * 0.6);
+export const rowIterCeil = rowCount - 1;
+export const rowCheckCeil = rowIterCeil - 1;
+export const rowPercent = 100 / rowCount;
+export const rowHeight = scaleY(rowPercent);
+export const gridlineWidth = 0.25;
+export const gridlineIntrusion = gridlineWidth * 2;
+export const area = columnCount * rowCount;
+export const squareInteriorWidth = columnWidth - gridlineIntrusion;
+export const squareInteriorHeight = rowHeight - gridlineIntrusion;
+export const onColor = "white";
+export const offColor = "black";
+export const fpsSteps = [1, 5, 15, 30, 60];

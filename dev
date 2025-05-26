@@ -1,0 +1,3 @@
+#! /usr/bin/env bash
+
+bun index.html --host=127.0.0.1 --port=3000

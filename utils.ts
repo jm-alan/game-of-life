@@ -1,7 +1,7 @@
-import { context, scaleX, scaleY } from "./canvas";
+import { context } from "./canvas";
+import { playPause } from "./controls";
 import { grid, procPool, state } from "./engine";
 import {
-  columnCheckCeil,
   columnCount,
   columnIterCeil,
   columnWidth,
@@ -10,7 +10,6 @@ import {
   msPerSecond,
   onColor,
   plusOne,
-  rowCheckCeil,
   rowCount,
   rowHeight,
   rowIterCeil,
@@ -18,30 +17,7 @@ import {
   squareInteriorWidth,
 } from "./constants";
 
-function drawGrid() {
-  context.clearRect(0, 0, scaleX(100), scaleY(100));
-  context.beginPath();
-  context.strokeStyle = "white";
-  context.lineWidth = gridlineWidth;
-
-  for (let i = 1; i < columnCount; i++) {
-    const X = i * columnWidth;
-    context.moveTo(X, 0);
-    context.lineTo(X, scaleY(100));
-  }
-
-  for (let i = 1; i < rowCount; i++) {
-    const Y = i * rowHeight;
-    context.moveTo(0, Y);
-    context.lineTo(scaleX(100), Y);
-  }
-
-  context.stroke();
-}
-
-drawGrid();
-
-export const scheduleSquare = (x: number, y: number) =>
+const scheduleSquare = (x: number, y: number) =>
   context.rect(
     x * columnWidth + gridlineWidth,
     y * rowHeight + gridlineWidth,
@@ -49,51 +25,21 @@ export const scheduleSquare = (x: number, y: number) =>
     squareInteriorHeight
   );
 
-export const drawSquare = (x: number, y: number) =>
-  context.fillRect(
-    x + gridlineWidth,
-    y + gridlineWidth,
-    squareInteriorWidth,
-    squareInteriorHeight
-  );
+function reassignNextFrame() {
+  state.nextFrame = new Promise(step);
+}
 
-export const sumCenterTopWall = (x: number): number =>
-  grid[x - 1]![0]! +
-  grid[x - 1]![1]! +
-  grid[x]![1]! +
-  grid[x + 1]![1]! +
-  grid[x + 1]![0]!;
+export function resetGrid() {
+  for (let i = 0; i < columnCount; i++) {
+    for (let j = 0; j < rowCount; j++) {
+      grid[i]![j] = 0b00000000;
+    }
+  }
+}
 
-export const sumCenterBottomWall = (x: number): number =>
-  grid[x - 1]![rowIterCeil]! +
-  grid[x - 1]![rowCheckCeil]! +
-  grid[x]![rowCheckCeil]! +
-  grid[x + 1]![rowCheckCeil]! +
-  grid[x]![rowIterCeil]!;
-
-export const sumLeftWall = (y: number): number =>
-  grid[0]![y - 1]! +
-  grid[1]![y - 1]! +
-  grid[1]![y]! +
-  grid[1]![y + 1]! +
-  grid[0]![y + 1]!;
-
-export const sumRightWall = (y: number) =>
-  grid[columnIterCeil]![y - 1]! +
-  grid[columnCheckCeil]![y - 1]! +
-  grid[columnCheckCeil]![y]! +
-  grid[columnCheckCeil]![y + 1]! +
-  grid[columnIterCeil]![y + 1]!;
-
-export const sumCoords = (x: number, y: number): number =>
-  grid[x - 1]![y - 1]! +
-  grid[x]![y - 1]! +
-  grid[x + 1]![y - 1]! +
-  grid[x + 1]![y]! +
-  grid[x + 1]![y + 1]! +
-  grid[x]![y + 1]! +
-  grid[x - 1]![y + 1]! +
-  grid[x - 1]![y]!;
+export function resetProc() {
+  state.toProc = 0;
+}
 
 export function changeTargetFrameTime(direction: boolean) {
   if (direction) {
@@ -106,6 +52,7 @@ export function changeTargetFrameTime(direction: boolean) {
   }
 
   state.targetFrameTime = msPerSecond / fpsSteps[state.targetFrameStep]!;
+  triggerInterval();
 }
 
 export function proc(x: number, y: number) {
@@ -114,7 +61,7 @@ export function proc(x: number, y: number) {
   state.toProc++;
 }
 
-function proc0() {
+export function step(res: (v: number) => void) {
   for (let i = 0; i < state.toProc; i++) {
     const [x, y] = procPool[i]!;
     if (x! > 0) {
@@ -144,41 +91,83 @@ function proc0() {
   }
 
   state.toProc = 0;
-}
-
-let pv = 0b00000000;
-
-function proc1() {
-  drawGrid();
-  context.beginPath();
-  context.fillStyle = onColor;
 
   for (let i = 0; i < columnCount; i++) {
     for (let j = 0; j < rowCount; j++) {
       pv = grid[i]![j]!;
       grid[i]![j] = 0;
       if ((pv & 0b11111110) === 0b00000110 || pv === 0b00000101) {
-        scheduleSquare(i, j);
         proc(i, j);
         grid[i]![j] = 0b00000001;
       }
     }
   }
 
+  res(performance.now());
+}
+
+context.fillStyle = onColor;
+
+export function draw() {
+  context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+  context.beginPath();
+  for (let i = 0; i < columnCount; i++) {
+    for (let j = 0; j < rowCount; j++) {
+      if ((grid[i]![j]! & 0b00000001) === 0b00000001) {
+        scheduleSquare(i, j);
+      }
+    }
+  }
   context.fill();
 }
 
-export function loop(t: number) {
+function triggerInterval() {
+  clearInterval(state.interval);
+  if (!state.running) {
+    return;
+  }
+  state.interval = setInterval(reassignNextFrame, state.targetFrameTime);
+}
+
+export function stopRunning() {
+  state.running = false;
+  playPause!.innerHTML = "Play";
+  triggerInterval();
+}
+
+function startRunning() {
+  state.running = true;
+  playPause!.innerHTML = "Pause";
+  triggerInterval();
+}
+
+export function toggleRunning() {
+  if (state.running) {
+    stopRunning();
+  } else {
+    startRunning();
+  }
+}
+
+let pv = 0b00000000;
+
+let start = 0;
+let end = 0;
+
+context.font = "20px Arial";
+
+export async function loop(t: number) {
   state.cancel = requestAnimationFrame(loop);
-  if (!state.running || t - state.t < state.targetFrameTime) {
+  if (t - state.t < 16.666) {
     return;
   }
 
   state.t = t;
 
-  proc0();
-  proc1();
+  start = performance.now();
 
-  state.toMake = 0;
-  state.toKill = 0;
+  draw();
+
+  end = performance.now();
+  context.fillText(`${(end - start).toFixed(6)}ms`, 30, 30);
 }

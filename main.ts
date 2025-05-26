@@ -1,24 +1,54 @@
-import { grid, state } from "./engine";
+import { grid } from "./engine";
 import { canvas, context } from "./canvas";
-import { columnWidth, offColor, onColor, rowHeight } from "./constants";
-import { changeTargetFrameTime, drawSquare, loop, proc } from "./utils";
+import { faster, playPause, reset, slower } from "./controls";
+import { columnWidth, rowHeight } from "./constants";
+import {
+  changeTargetFrameTime,
+  draw,
+  loop,
+  proc,
+  resetGrid,
+  resetProc,
+  stopRunning,
+  toggleRunning,
+} from "./utils";
 
 canvas.addEventListener("click", (e) => {
   const columnMod = ~~(e.clientX / columnWidth);
   const rowMod = ~~(e.clientY / rowHeight);
 
-  const value = grid[columnMod]![rowMod]!;
   grid[columnMod]![rowMod]! ^= 0b00000001;
-  context.fillStyle = value ? offColor : onColor;
-  drawSquare(columnMod * columnWidth, rowMod * rowHeight);
+
+  draw();
 
   proc(columnMod, rowMod);
 });
 
+reset!.addEventListener("click", () => {
+  stopRunning();
+  resetGrid();
+  resetProc();
+  context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+  (reset as HTMLButtonElement).blur();
+});
+
+playPause!.addEventListener("click", () => {
+  toggleRunning();
+  (playPause as HTMLButtonElement).blur();
+});
+
+slower!.addEventListener("click", () => {
+  changeTargetFrameTime(false);
+  (slower as HTMLButtonElement).blur();
+});
+
+faster!.addEventListener("click", () => {
+  changeTargetFrameTime(true);
+  (faster as HTMLButtonElement).blur();
+});
+
 export const keyMap = {
-  [" "]() {
-    state.running = !state.running;
-  },
+  [" "]: toggleRunning,
   ["+"]() {
     changeTargetFrameTime(true);
   },

@@ -1,7 +1,7 @@
 import { scaleX, scaleY } from "./canvas";
 
 export const msPerSecond = 1000;
-export const columnCount = 250;
+export const columnCount = 500;
 export const columnIterCeil = columnCount - 1;
 export const columnCheckCeil = columnIterCeil - 1;
 export const columnPercent = 100 / columnCount;

@@ -1,5 +1,6 @@
 import { scaleX, scaleY } from "./canvas";
 
+export const msPerSecond = 1000;
 export const columnCount = 250;
 export const columnIterCeil = columnCount - 1;
 export const columnCheckCeil = columnIterCeil - 1;
@@ -18,3 +19,4 @@ export const squareInteriorHeight = rowHeight - gridlineIntrusion;
 export const onColor = "white";
 export const offColor = "black";
 export const fpsSteps = [1, 5, 15, 30, 60];
+export const plusOne = 0b00000010;

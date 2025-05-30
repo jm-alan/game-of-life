@@ -1,44 +1,37 @@
 import { context } from "./canvas";
 import { playPause } from "./controls";
-import { grid, procPool, state } from "./engine";
+import { grid, procCache, procPool, state } from "./engine";
 import {
   columnCount,
   columnIterCeil,
   columnWidth,
   fpsSteps,
-  gridlineWidth,
+  maskNeighbors,
   msPerSecond,
   onColor,
   plusOne,
   rowCount,
   rowHeight,
   rowIterCeil,
-  squareInteriorHeight,
-  squareInteriorWidth,
+  threeNeighbors,
+  twoNeighborsRetain,
 } from "./constants";
 
-const scheduleSquare = (x: number, y: number) =>
-  context.rect(
-    x * columnWidth + gridlineWidth,
-    y * rowHeight + gridlineWidth,
-    squareInteriorWidth,
-    squareInteriorHeight
-  );
-
-function reassignNextFrame() {
-  state.nextFrame = new Promise(step);
-}
-
 export function resetGrid() {
-  for (let i = 0; i < columnCount; i++) {
-    for (let j = 0; j < rowCount; j++) {
-      grid[i]![j] = 0b00000000;
+  for (let x = 0; x < columnCount; x++) {
+    for (let y = 0; y < rowCount; y++) {
+      grid[x]![y] = 0b00000000;
     }
   }
 }
 
 export function resetProc() {
   state.toProc = 0;
+  for (let x = 0; x < columnCount; x++) {
+    for (let y = 0; y < rowCount; y++) {
+      procCache[x]![y] = -1;
+    }
+  }
 }
 
 export function changeTargetFrameTime(direction: boolean) {
@@ -56,77 +49,152 @@ export function changeTargetFrameTime(direction: boolean) {
 }
 
 export function proc(x: number, y: number) {
+  const cacheIdx = procCache[x]![y]!;
+
+  if (cacheIdx >= 0) {
+    return;
+  }
+
   procPool[state.toProc]![0] = x;
   procPool[state.toProc]![1] = y;
+  procCache[x]![y] = state.toProc;
   state.toProc++;
 }
 
-export function step(res: (v: number) => void) {
+export function unProc(x: number, y: number) {
+  const cacheIdx = procCache[x]![y]!;
+
+  if (cacheIdx === -1) {
+    return;
+  }
+
+  [procPool[cacheIdx], procPool[state.toProc - 1]] = [
+    procPool[state.toProc - 1]!,
+    procPool[cacheIdx]!,
+  ];
+  procCache[x]![y] = -1;
+  state.toProc--;
+}
+
+let pv = 0b00000000;
+
+function reassignNextFrame() {
+  state.nextFrame = new Promise(step);
+}
+
+let now = performance.now();
+
+function step(res: () => void) {
   for (let i = 0; i < state.toProc; i++) {
     const [x, y] = procPool[i]!;
+    procCache[x!]![y!] = -1;
+
     if (x! > 0) {
       grid[x! - 1]![y!]! += plusOne;
+
       if (y! > 0) {
         grid[x! - 1]![y! - 1]! += plusOne;
+      } else {
+        grid[x! - 1]![rowIterCeil]! += plusOne;
       }
+
       if (y! < rowIterCeil) {
         grid[x! - 1]![y! + 1]! += plusOne;
+      } else {
+        grid[x! - 1]![0]! += plusOne;
+      }
+    } else {
+      grid[columnIterCeil]![y!]! += plusOne;
+
+      if (y! > 0) {
+        grid[columnIterCeil]![y! - 1]! += plusOne;
+      } else {
+        grid[columnIterCeil]![rowIterCeil]! += plusOne;
+      }
+
+      if (y! < rowIterCeil) {
+        grid[columnIterCeil]![y! + 1]! += plusOne;
+      } else {
+        grid[columnIterCeil]![0]! += plusOne;
       }
     }
+
     if (x! < columnIterCeil) {
       grid[x! + 1]![y!]! += plusOne;
+
       if (y! > 0) {
         grid[x! + 1]![y! - 1]! += plusOne;
+      } else {
+        grid[x! + 1]![rowIterCeil]! += plusOne;
       }
+
       if (y! < rowIterCeil) {
         grid[x! + 1]![y! + 1]! += plusOne;
+      } else {
+        grid[x! + 1]![0]! += plusOne;
+      }
+    } else {
+      grid[0]![y!]! += plusOne;
+
+      if (y! > 0) {
+        grid[0]![y! - 1]! += plusOne;
+      } else {
+        grid[0]![rowIterCeil]! += plusOne;
+      }
+
+      if (y! < rowIterCeil) {
+        grid[0]![y! + 1]! += plusOne;
+      } else {
+        grid[0]![0]! += plusOne;
       }
     }
+
     if (y! > 0) {
       grid[x!]![y! - 1]! += plusOne;
+    } else {
+      grid[x!]![rowIterCeil]! += plusOne;
     }
     if (y! < rowIterCeil) {
       grid[x!]![y! + 1]! += plusOne;
+    } else {
+      grid[x!]![0]! += plusOne;
     }
   }
 
   state.toProc = 0;
 
-  for (let i = 0; i < columnCount; i++) {
-    for (let j = 0; j < rowCount; j++) {
-      pv = grid[i]![j]!;
-      grid[i]![j] = 0;
-      if ((pv & 0b11111110) === 0b00000110 || pv === 0b00000101) {
-        proc(i, j);
-        grid[i]![j] = 0b00000001;
+  for (let x = 0; x < columnCount; x++) {
+    for (let y = 0; y < rowCount; y++) {
+      pv = grid[x]![y]!;
+      grid[x]![y] = 0;
+      if (
+        (pv & maskNeighbors) === threeNeighbors ||
+        pv === twoNeighborsRetain
+      ) {
+        proc(x, y);
+        grid[x]![y] = 0b00000001;
       }
     }
   }
 
-  res(performance.now());
+  res();
+  now = performance.now();
+  state.frameTimeout = setTimeout(
+    reassignNextFrame,
+    state.targetFrameTime - (now - state.lastFrame)
+  );
+  state.lastFrame = now;
 }
 
 context.fillStyle = onColor;
 
-export function draw() {
-  context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-  context.beginPath();
-  for (let i = 0; i < columnCount; i++) {
-    for (let j = 0; j < rowCount; j++) {
-      if ((grid[i]![j]! & 0b00000001) === 0b00000001) {
-        scheduleSquare(i, j);
-      }
-    }
-  }
-  context.fill();
-}
-
 function triggerInterval() {
-  clearInterval(state.interval);
+  clearTimeout(state.frameTimeout);
   if (!state.running) {
+    state.nextFrame = new Promise<void>((res) => res());
     return;
   }
-  state.interval = setInterval(reassignNextFrame, state.targetFrameTime);
+  state.nextFrame = new Promise(step);
 }
 
 export function stopRunning() {
@@ -149,12 +217,14 @@ export function toggleRunning() {
   }
 }
 
-let pv = 0b00000000;
-
 let start = 0;
+let middle = 0;
 let end = 0;
 
-context.font = "20px Arial";
+context.font = "20px monospace";
+
+let iterX = 0;
+let iterY = 0;
 
 export async function loop(t: number) {
   state.cancel = requestAnimationFrame(loop);
@@ -165,9 +235,28 @@ export async function loop(t: number) {
   state.t = t;
 
   start = performance.now();
+  await state.nextFrame;
+  middle = performance.now();
 
-  draw();
+  context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+  context.beginPath();
+  for (iterX = 0; iterX < columnCount; iterX++) {
+    for (iterY = 0; iterY < rowCount; iterY++) {
+      if ((grid[iterX]![iterY]! & 0b00000001) === 0b00000001) {
+        context.rect(
+          iterX * columnWidth,
+          iterY * rowHeight,
+          columnWidth,
+          rowHeight
+        );
+      }
+    }
+  }
+  context.fill();
 
   end = performance.now();
-  context.fillText(`${(end - start).toFixed(6)}ms`, 30, 30);
+
+  context.fillText(`C ${(middle - start).toFixed(6)}ms`, 0, 20);
+  context.fillText(`G ${(end - middle).toFixed(6)}ms`, 0, 40);
+  context.fillText(`T ${(end - start).toFixed(6)}ms`, 0, 60);
 }

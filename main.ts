@@ -1,27 +1,29 @@
 import { grid } from "./engine";
 import { canvas, context } from "./canvas";
-import { faster, playPause, reset, slower } from "./controls";
 import { columnWidth, rowHeight } from "./constants";
+import { faster, playPause, reset, slower } from "./controls";
 import {
   changeTargetFrameTime,
-  draw,
   loop,
   proc,
   resetGrid,
   resetProc,
   stopRunning,
   toggleRunning,
+  unProc,
 } from "./utils";
 
 canvas.addEventListener("click", (e) => {
-  const columnMod = ~~(e.clientX / columnWidth);
-  const rowMod = ~~(e.clientY / rowHeight);
+  const x = ~~(e.clientX / columnWidth);
+  const y = ~~(e.clientY / rowHeight);
 
-  grid[columnMod]![rowMod]! ^= 0b00000001;
+  grid[x]![y]! ^= 0b00000001;
 
-  draw();
-
-  proc(columnMod, rowMod);
+  if (grid[x]![y]! & 0b00000001) {
+    proc(x, y);
+  } else {
+    unProc(x, y);
+  }
 });
 
 reset!.addEventListener("click", () => {
@@ -59,6 +61,9 @@ export const keyMap = {
 
 window.addEventListener("keydown", (e) => {
   if (e.key in keyMap) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
     keyMap[e.key]!();
   }
 });
